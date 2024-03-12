@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from typing import Optional
 from pytorch3d.ops import knn_points
 
-from utils import SampleAndGroup, SoftProjection, gather 
+from utils import SampleAndGroup, SoftProjection, gather, pc_normalize 
 
 
 def square_distance(
@@ -726,7 +726,7 @@ class GraspClassifier(nn.Module):
         return score
         
     
-if __name__ == '__main__':
-    m = ContactTransGrasp([1024, 512, 256], [0.2, 0.3, 0.4], 5, [[128, 128], [256, 256], [512, 512]], 4)
-    x = torch.rand(2, 2048, 3)
-    print(m(x).shape)
+# if __name__ == '__main__':
+#     m = ContactTransGrasp([1024, 512, 256], [0.2, 0.3, 0.4], 5, [[128, 128], [256, 256], [512, 512]], 4)
+#     x = torch.rand(2, 2048, 3)
+#     print(m(x).shape)

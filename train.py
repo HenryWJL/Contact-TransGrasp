@@ -5,18 +5,13 @@ import tomli
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.distributed as dist
-import torch.multiprocessing as mp
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
-from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
 from accelerate import Accelerator
 from datetime import datetime
 
-from dataset import GraspDataset, set_ground_truth
-from model import ContactTransGrasp
-from loss import TotalLoss
+from utils import TotalLoss, GraspDataset, set_ground_truth
+from models import ContactTransGrasp2
 
 
 def make_parser():
