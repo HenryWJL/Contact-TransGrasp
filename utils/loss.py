@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Optional
 from pytorch3d.ops import knn_points
 
 from .transform import pnt2quat, mat2quat
@@ -9,7 +10,13 @@ from .transform import pnt2quat, mat2quat
 class TotalLoss(nn.Module):
     
     
-    def __init__(self, gamma, alpha, beta, theta):
+    def __init__(
+        self,
+        gamma: Optional[float],
+        alpha: Optional[float],
+        beta: Optional[float],
+        theta: Optional[float]
+        ):
         '''
         Params:
             gamma: weight balance in sample loss
@@ -25,7 +32,15 @@ class TotalLoss(nn.Module):
         self.theta = theta
         
     
-    def forward(self, xyz, sample_xyz, temp, grasp_pred, grasp_gt, class_pred, class_gt):
+    def forward(
+        self,
+        xyz: Optional[torch.Tensor],
+        sample_xyz: Optional[torch.Tensor],
+        temp: Optional[nn.Parameter],
+        grasp_pred: Optional[torch.Tensor],
+        grasp_gt: Optional[torch.Tensor],
+        class_pred: Optional[torch.Tensor],
+        class_gt: Optional[torch.Tensor]):
         '''
         Params:
             xyz: xyz coordinates of original input points (B, N', 3)
@@ -54,7 +69,11 @@ class TotalLoss(nn.Module):
         return total_loss
     
     
-    def get_sample_loss(self, xyz, sample_xyz):
+    def get_sample_loss(
+        self,
+        xyz: Optional[torch.Tensor],
+        sample_xyz: Optional[torch.Tensor]
+        ):
         dist_smp_org, _, _ = knn_points(p1=sample_xyz, p2=xyz, norm=2, K=1)
         dist_org_smp, _, _ = knn_points(p1=xyz, p2=sample_xyz, norm=2, K=1)
         loss_smp_org = torch.mean(dist_smp_org)
@@ -65,14 +84,18 @@ class TotalLoss(nn.Module):
         return loss_smp_org + loss_max_min + self.gamma * loss_org_smp
     
     
-    def get_projection_loss(self, temp):
+    def get_projection_loss(self, temp: Optional[nn.Parameter]):
         if temp is None:
             return 0.0
         else:
             return temp ** 2
     
     
-    def get_regression_loss(self, grasp_pred, grasp_gt):
+    def get_regression_loss(
+        self,
+        grasp_pred: Optional[torch.Tensor],
+        grasp_gt: Optional[torch.Tensor]
+        ):
         center_pred, quat_pred = pnt2quat(grasp_pred)
         center_gt, quat_gt = mat2quat(grasp_gt)
         trans_loss = F.pairwise_distance(center_pred.reshape(-1, 3), center_gt.reshape(-1, 3))
@@ -83,6 +106,10 @@ class TotalLoss(nn.Module):
         return trans_loss + self.alpha * rot_loss
     
         
-    def get_classification_loss(self, class_pred, class_gt):
+    def get_classification_loss(
+        self,
+        class_pred: Optional[torch.Tensor],
+        class_gt: Optional[torch.Tensor]
+        ):
         
         return F.binary_cross_entropy(class_pred, class_gt)

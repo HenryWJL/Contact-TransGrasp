@@ -3,6 +3,7 @@ import trimesh
 import torch
 import numpy as np
 from glob import glob
+from typing import Optional
 from torch.utils.data import Dataset
 from pytorch3d.ops import knn_points, knn_gather
 
@@ -14,10 +15,10 @@ class GraspDataset(Dataset):
     
     def __init__(
         self,
-        object_dir,
-        mesh_dir,
-        point_num,
-        mode='train'
+        object_dir: Optional[str],
+        mesh_dir: Optional[str],
+        point_num: Optional[int],
+        mode: Optional[str] = 'train'
         ):
         '''
         Params:
@@ -48,7 +49,11 @@ class GraspDataset(Dataset):
         return len(self.object_fname)
     
         
-def set_ground_truth(grasp, T, success):
+def set_ground_truth(
+    grasp: Optional[torch.Tensor],
+    T: Optional[torch.Tensor],
+    success: Optional[torch.Tensor]
+    ):
     ''' Set the ground truth of a grasp based on the grasp nearest to the point cloud.
     
     Params:

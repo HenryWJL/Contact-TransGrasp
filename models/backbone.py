@@ -4,31 +4,8 @@ import torch.nn.functional as F
 from typing import Optional
 from pytorch3d.ops import knn_points
 
-from utils import SampleAndGroup, SoftProjection, gather, pc_normalize 
-
-
-def square_distance(
-    xyz_up: Optional[torch.Tensor],
-    xyz_down: Optional[torch.Tensor]
-    ):
-    """
-    
-    Params:
-        xyz_up: the xyz coordinates of point clouds with less points (B, N, 3)
-        
-        xyz_down: the xyz coordinates of point clouds with more points (B, M, 3)
-        
-    Returns:
-        per point square distance (B, N, M)
-        
-    """
-    B, N, _ = xyz_up.shape
-    M = xyz_down.shape[1]
-    xyz_up = xyz_up.unsqueeze(-2).repeat(1, 1, M, 1)  # (B, N, M, 3)
-    xyz_down = xyz_down.unsqueeze(1).repeat(1, N, 1, 1)  # (B, N, M, 3)
-    square_dist = torch.sum((xyz_up - xyz_down) ** 2, dim=-1)
-    
-    return square_dist
+from utils import SampleAndGroup, SoftProjection
+from utils import gather, pc_normalize, square_distance
 
 
 class MiniPointNet(nn.Module):

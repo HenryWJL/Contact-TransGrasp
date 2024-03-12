@@ -1,10 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Optional
 from pytorch3d.ops import sample_farthest_points, ball_query, knn_points
 
 
-def gather(x, idx):
+def gather(
+    x: Optional[torch.Tensor],
+    idx: Optional[torch.Tensor]
+    ):
     """gather elemtents of x using index"""
     idx = torch.where(idx==-1, idx.shape[1], idx)
     idx = idx[ :, :, :, None].expand(-1, -1, -1, x.shape[-1])  # [ :, :, :, None] equivalent to unsqueeze(-1)
@@ -13,7 +17,7 @@ def gather(x, idx):
     return y
 
 
-def pc_normalize(xyz):
+def pc_normalize(xyz: Optional[torch.Tensor]):
     B, N, C = xyz.shape  
     center_xyz = torch.mean(xyz, dim=-2).detach()
     center_xyz_expand = center_xyz.unsqueeze(-2).expand_as(xyz)
@@ -23,6 +27,30 @@ def pc_normalize(xyz):
     xyz_norm = (xyz - center_xyz_expand) / d_max_expand
     
     return center_xyz, d_max, xyz_norm     
+
+
+def square_distance(
+    xyz_up: Optional[torch.Tensor],
+    xyz_down: Optional[torch.Tensor]
+    ):
+    """
+    
+    Params:
+        xyz_up: the xyz coordinates of point clouds with less points (B, N, 3)
+        
+        xyz_down: the xyz coordinates of point clouds with more points (B, M, 3)
+        
+    Returns:
+        per point square distance (B, N, M)
+        
+    """
+    B, N, _ = xyz_up.shape
+    M = xyz_down.shape[1]
+    xyz_up = xyz_up.unsqueeze(-2).repeat(1, 1, M, 1)  # (B, N, M, 3)
+    xyz_down = xyz_down.unsqueeze(1).repeat(1, N, 1, 1)  # (B, N, M, 3)
+    square_dist = torch.sum((xyz_up - xyz_down) ** 2, dim=-1)
+    
+    return square_dist
     
     
 class SampleAndGroup(nn.Module):
@@ -30,9 +58,9 @@ class SampleAndGroup(nn.Module):
     
     def __init__(
         self, 
-        sample_num, 
-        radius, 
-        neighbor_num
+        sample_num: Optional[int], 
+        radius: Optional[float], 
+        neighbor_num: Optional[int]
         ):
         '''
         Params:
@@ -49,7 +77,11 @@ class SampleAndGroup(nn.Module):
         self.neighbor_num = neighbor_num
         
         
-    def forward(self, xyz, feat):
+    def forward(
+        self,
+        xyz: Optional[torch.Tensor],
+        feat: Optional[torch.Tensor]
+        ):
         '''
         Params:
             xyz: the original point cloud (B, N', 3)
