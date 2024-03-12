@@ -25,10 +25,7 @@ import os
 import json
 import h5py
 import trimesh
-import trimesh.path
-import trimesh.transformations as tra
 import numpy as np
-from shapely.geometry import Point
 
 
 def load_mesh(filename, mesh_root_dir, scale=None):
