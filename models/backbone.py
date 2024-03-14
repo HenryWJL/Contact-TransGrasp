@@ -172,10 +172,10 @@ class TransformerEncoderLayer(nn.Module):
         )
         self.layer_norm1 = nn.LayerNorm(d_model)
         self.mlp = nn.Sequential(
-            nn.Linear(d_model, dim_feedforward),
+            nn.Linear(d_model, 2 * d_model),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout, inplace=True),
-            nn.Linear(dim_feedforward, d_model),
+            nn.Linear(2 * d_model, d_model),
             nn.Dropout(dropout, inplace=True)
         )
         self.layer_norm2 = nn.LayerNorm(d_model)
@@ -190,7 +190,48 @@ class TransformerEncoderLayer(nn.Module):
         y2 = self.layer_norm2(self.mlp(y1) + y1)
         
         return y2
+
+
+class TransformerEncoder(nn.Module):
     
+    
+    def __init__(
+        self,
+        d_model: Optional[int],
+        nhead: Optional[int],
+        num_layers: Optional[int]
+        ):
+        """
+        
+        Params:
+            d_model: the dimension of features in the input 
+            
+            nhead: the number of attention heads
+            
+            num_layers: the number of Transformer encoder layers 
+            
+        """
+        super().__init__()
+        
+        self.encoder = nn.ModuleList([
+            TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=nhead
+            )
+            for i in range(num_layers)]
+        )
+        
+        
+    def forward(
+        self,
+        x: Optional[torch.Tensor],
+        pos: Optional[torch.Tensor]
+        ):
+        for _, encoder_layer in enumerate(self.encoder):
+            x = encoder_layer(x, pos)
+            
+        return x
+
     
 class EncoderBlock(nn.Module):
     
@@ -203,6 +244,7 @@ class EncoderBlock(nn.Module):
         feature_dim: Optional[int],
         out_channels: Optional[list],
         nhead: Optional[int],
+        num_layers: Optional[int],
         bn: Optional[bool] = True
         ):
         """Feature extractor encoder block
@@ -219,6 +261,8 @@ class EncoderBlock(nn.Module):
             out_channels: the output channels of the convolutional layers in the set abstraction layer
             
             nhead: the number of attention heads
+            
+            num_layers: the number of Transformer encoder layers
             
             bn: if True, add batch normalization
             
@@ -243,10 +287,10 @@ class EncoderBlock(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(feature_dim, out_channels[-1])
         )
-        self.transformer_encoder = TransformerEncoderLayer(
+        self.transformer_encoder = TransformerEncoder(
             d_model=out_channels[-1],
             nhead=nhead,
-            bn=bn
+            num_layers=num_layers
         )
         self.cross_attn = MultiheadAttention(
             embed_dim=out_channels[-1],
@@ -303,8 +347,7 @@ class DecoderBlock(nn.Module):
         self,
         dim_in: Optional[int],
         dim_out: Optional[int],
-        bn: Optional[bool] = True,
-        eps: Optional[float] = 1e-8
+        bn: Optional[bool] = True
         ):
         """Feature extractor decoder block
         
@@ -315,8 +358,6 @@ class DecoderBlock(nn.Module):
             
             bn: if True, add batch normalization
             
-            eps: term added to prevent zero division
-            
         """
         super().__init__()
         self.mlp = nn.Sequential(
@@ -326,15 +367,14 @@ class DecoderBlock(nn.Module):
             nn.Conv1d(dim_in, dim_out, 1),
             nn.BatchNorm1d(dim_out) if bn else nn.Identity()
         )
-        self.eps = eps
         
         
     def forward(
         self,
-        xyz_down,
-        xyz_up,
-        feat_down,
-        feat_up
+        xyz_down: Optional[torch.Tensor],
+        xyz_up: Optional[torch.Tensor],
+        feat_down: Optional[torch.Tensor],
+        feat_up: Optional[torch.Tensor]
         ):
         """
         
@@ -354,7 +394,7 @@ class DecoderBlock(nn.Module):
         B, N,_ = xyz_up.shape
         D = feat_down.shape[-1]
         dist = square_distance(xyz_up, xyz_down)  # (B, N, M)
-        dist_recip = 1.0 / (dist + self.eps)
+        dist_recip = 1.0 / (dist + 1e-8)
         weight = dist_recip / torch.sum(dist_recip, dim=2, keepdim=True)
         weight = weight.unsqueeze(-1).repeat(1, 1, 1, D)  # (B, N, M, D)
         feat_down = feat_down.unsqueeze(1).repeat(1, N, 1, 1)  # (B, N, M, D)
@@ -380,7 +420,7 @@ class FeatureExtractor(nn.Module):
         neighbor_num: Optional[list],
         out_channels: Optional[list],
         nhead: Optional[int],
-        bn: Optional[bool] = True
+        num_layers: Optional[int]
         ):
         """Extract per-point features
         
@@ -395,6 +435,8 @@ class FeatureExtractor(nn.Module):
             
             nhead: the number of attention heads
             
+            num_layers: the number of Transformer encoder layers
+            
             bn: if True, add batch normalization
             
         """
@@ -407,7 +449,7 @@ class FeatureExtractor(nn.Module):
             feature_dim=3,
             out_channels=out_channels[0],
             nhead=nhead,
-            bn=bn
+            num_layers=num_layers
         )
         self.encoder2 = EncoderBlock(
             sample_num=sample_num[1],
@@ -416,7 +458,7 @@ class FeatureExtractor(nn.Module):
             feature_dim=out_channels[0][-1],
             out_channels=out_channels[1],
             nhead=nhead,
-            bn=bn
+            num_layers=num_layers
         )
         self.encoder3 = EncoderBlock(
             sample_num=sample_num[2],
@@ -425,22 +467,19 @@ class FeatureExtractor(nn.Module):
             feature_dim=out_channels[1][-1],
             out_channels=out_channels[2],
             nhead=nhead,
-            bn=bn
+            num_layers=num_layers
         )
         self.decoder3 = DecoderBlock(
             dim_in=out_channels[2][-1] + out_channels[1][-1],
-            dim_out=out_channels[1][-1],
-            bn=bn
+            dim_out=out_channels[1][-1]
         )
         self.decoder2 = DecoderBlock(
             dim_in=out_channels[1][-1] + out_channels[0][-1],
-            dim_out=out_channels[0][-1],
-            bn=bn
+            dim_out=out_channels[0][-1]
         )
         self.decoder1 = DecoderBlock(
             dim_in=out_channels[0][-1],
-            dim_out=out_channels[0][-1],
-            bn=bn
+            dim_out=out_channels[0][-1]
         )
         
         
@@ -479,7 +518,7 @@ class ContactPointSampler(nn.Module):
         self.sample_num = sample_num
         
         self.sampler = nn.Sequential(
-            nn.Conv1d(feature_dim, 256),
+            nn.Linear(feature_dim, 256),
             nn.BatchNorm1d(256) if bn else nn.Identity(),
             nn.ReLU(),
             nn.Linear(256, 256),
@@ -521,7 +560,8 @@ class ContactPointSampler(nn.Module):
                 p1=p1, 
                 p2=xyz, 
                 norm=2, 
-                K=1 
+                K=1,
+                return_nn=True
             )
             p1 = p1.squeeze()
             temp = 0.0
@@ -644,7 +684,7 @@ class GraspRegressor(nn.Module):
             
         """
         # feature aggregation
-        feat_agg = torch.max(feat_group, dim=-2).transpose(2, 1)  # (B, C, M)
+        feat_agg = torch.max(feat_group, dim=-2)[0].transpose(2, 1)  # (B, C, M)
         # obtain baseline vector, gripper width, and pitch angle
         vector = F.normalize(self.vector_regressor(feat_agg), dim=-1).transpose(2, 1)
         width = self.width_regressor(feat_agg).squeeze()
@@ -692,7 +732,7 @@ class GraspClassifier(nn.Module):
             
         """
         # feature aggregation
-        feat_agg = torch.max(feat_group, dim=-2)  # (B, M, C)
+        feat_agg = torch.max(feat_group, dim=-2)[0]  # (B, M, C)
         feat = torch.cat([grasp, feat_agg], dim=-1)  # (B, M, (C+7))
         score = self.mlp(feat.transpose(2, 1)).squeeze()
         
@@ -709,6 +749,7 @@ class ContactTransGrasp(nn.Module):
         neighbor_num: Optional[list],
         out_channels: Optional[list],
         nhead: Optional[int],
+        num_layers: Optional[int],
         point_num: Optional[int]
         ):
         """
@@ -724,6 +765,8 @@ class ContactTransGrasp(nn.Module):
             
             nhead: the number of attention heads
             
+            num_layers: the number of Transformer encoder layers
+            
             point_num: the number of sampled contact points
 
         """
@@ -736,7 +779,8 @@ class ContactTransGrasp(nn.Module):
             radius=radius,
             neighbor_num=neighbor_num,
             out_channels=out_channels,
-            nhead=nhead
+            nhead=nhead,
+            num_layers=num_layers
         )
         self.sampler = ContactPointSampler(
             feature_dim=self.feature_dim,
@@ -757,7 +801,7 @@ class ContactTransGrasp(nn.Module):
         feat_group = self.feat_grouper(xyz, p1, feat)
         vector, width, angle = self.regressor(feat_group)  
         # get the second contact points
-        p2 = p1 - width * vector
+        p2 = p1 - vector * width.unsqueeze(-1).expand_as(vector)
         # get grasp quality
         grasp = torch.cat((p1, p2, angle.unsqueeze(-1)), dim=-1) 
         score = self.classifier(grasp, feat_group)
@@ -766,12 +810,21 @@ class ContactTransGrasp(nn.Module):
         std = std.unsqueeze(-1).unsqueeze(-1).expand_as(p1)
         p1 = p1 * std + mean
         p2 = p2 * std + mean
-        grasp = torch.cat((p1, p2, angle), dim=-1)
+        grasp = torch.cat((p1, p2, angle.unsqueeze(-1)), dim=-1)
         
         return p1, temp, grasp, score
     
     
 # if __name__ == '__main__':
-#     m = ContactTransGrasp([1024, 512, 256], [0.2, 0.3, 0.4], 5, [[128, 128], [256, 256], [512, 512]], 4)
-#     x = torch.rand(2, 2048, 3)
-#     print(m(x).shape)
+#     m = ContactTransGrasp(
+#         [128, 64, 32],
+#         [0.2, 0.3, 0.4],
+#         [5, 10, 15],
+#         [[128, 128], [256, 256], [512, 512]],
+#         4,
+#         4,
+#         64
+#     )
+#     x = torch.rand(2, 256, 3)
+#     m.eval()
+#     m(x)
