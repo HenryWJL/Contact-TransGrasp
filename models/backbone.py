@@ -377,7 +377,7 @@ class FeatureExtractor(nn.Module):
         self,
         sample_num: Optional[list],
         radius: Optional[list],
-        neighbor_num: Optional[int],
+        neighbor_num: Optional[list],
         out_channels: Optional[list],
         nhead: Optional[int],
         bn: Optional[bool] = True
@@ -385,11 +385,11 @@ class FeatureExtractor(nn.Module):
         """Extract per-point features
         
         Params:
-            sample_num: the number of sampled points
+            sample_num: the number of sampled points for furthest point sampling
             
-            radius: the radius of ball
+            radius: the radius of ball for ball query
             
-            neighbor_num: the number of neighbor points in a group 
+            neighbor_num: the number of neighbor points for ball query 
             
             out_channels: the output channels of the convolutional layers in the set abstraction layer
             
@@ -403,7 +403,7 @@ class FeatureExtractor(nn.Module):
         self.encoder1 = EncoderBlock(
             sample_num=sample_num[0],
             radius=radius[0],
-            neighbor_num=neighbor_num,
+            neighbor_num=neighbor_num[0],
             feature_dim=3,
             out_channels=out_channels[0],
             nhead=nhead,
@@ -412,7 +412,7 @@ class FeatureExtractor(nn.Module):
         self.encoder2 = EncoderBlock(
             sample_num=sample_num[1],
             radius=radius[1],
-            neighbor_num=neighbor_num,
+            neighbor_num=neighbor_num[1],
             feature_dim=out_channels[0][-1],
             out_channels=out_channels[1],
             nhead=nhead,
@@ -421,7 +421,7 @@ class FeatureExtractor(nn.Module):
         self.encoder3 = EncoderBlock(
             sample_num=sample_num[2],
             radius=radius[2],
-            neighbor_num=neighbor_num,
+            neighbor_num=neighbor_num[2],
             feature_dim=out_channels[1][-1],
             out_channels=out_channels[2],
             nhead=nhead,
@@ -462,7 +462,6 @@ class ContactPointSampler(nn.Module):
         self,
         feature_dim: Optional[int],
         sample_num: Optional[int],
-        is_train: Optional[bool] = True,
         bn: Optional[bool] = True
         ):
         """Sample contact points
@@ -470,9 +469,7 @@ class ContactPointSampler(nn.Module):
         Params: 
             feature_dim: the dimension of extracted point features
         
-            sample_num: the number of sampled points
-            
-            is_train: if True, adds soft projection. Otherwise, hard sampling
+            sample_num: the number of sampled contact points
         
             bn: if True, add batch normalization
             
@@ -480,7 +477,6 @@ class ContactPointSampler(nn.Module):
         super().__init__()
         
         self.sample_num = sample_num
-        self.is_train = is_train
         
         self.sampler = nn.Sequential(
             nn.Conv1d(feature_dim, 256),
@@ -517,7 +513,7 @@ class ContactPointSampler(nn.Module):
         # sample contact points
         p1 = self.sampler(feat).reshape(-1, self.sample_num, 3)
         # soft projection (training)
-        if self.is_train:
+        if self.training:
             p1, temp = self.soft_proj(xyz, p1)
         # hard sampling (validation or testing)
         else:
@@ -701,7 +697,79 @@ class GraspClassifier(nn.Module):
         score = self.mlp(feat.transpose(2, 1)).squeeze()
         
         return score
+
+
+class ContactTransGrasp(nn.Module):
+    
+    
+    def __init__(
+        self,
+        sample_num: Optional[list],
+        radius: Optional[list],
+        neighbor_num: Optional[list],
+        out_channels: Optional[list],
+        nhead: Optional[int],
+        point_num: Optional[int]
+        ):
+        """
         
+        Params:
+            sample_num: the number of sampled points for furthest point sampling
+            
+            radius: the radius of ball for ball query
+            
+            neighbor_num: the number of neighbor points for ball query 
+            
+            out_channels: the output channels of the convolutional layers in the set abstraction layer
+            
+            nhead: the number of attention heads
+            
+            point_num: the number of sampled contact points
+
+        """
+        super().__init__()
+        
+        self.feature_dim = out_channels[0][-1]
+        
+        self.feat_extractor = FeatureExtractor(
+            sample_num=sample_num,
+            radius=radius,
+            neighbor_num=neighbor_num,
+            out_channels=out_channels,
+            nhead=nhead
+        )
+        self.sampler = ContactPointSampler(
+            feature_dim=self.feature_dim,
+            sample_num=point_num
+        )
+        self.feat_grouper = FeatureGrouper(self.feature_dim)
+        self.regressor = GraspRegressor(self.feature_dim)
+        self.classifier = GraspClassifier(self.feature_dim)
+    
+    
+    def forward(self, xyz: Optional[torch.Tensor]):
+        # get normalize points
+        xyz, mean, std = pc_normalize(xyz)
+        # extract point features
+        feat = self.feat_extractor(xyz)
+        # get grasps
+        p1, temp = self.sampler(xyz, feat)
+        feat_group = self.feat_grouper(xyz, p1, feat)
+        vector, width, angle = self.regressor(feat_group)  
+        # get the second contact points
+        p2 = p1 - width * vector
+        # get grasp quality
+        grasp = torch.cat((p1, p2, angle.unsqueeze(-1)), dim=-1) 
+        score = self.classifier(grasp, feat_group)
+        # get unnormalized grasps
+        mean = mean.unsqueeze(-2).expand_as(p1)
+        std = std.unsqueeze(-1).unsqueeze(-1).expand_as(p1)
+        p1 = p1 * std + mean
+        p2 = p2 * std + mean
+        grasp = torch.cat((p1, p2, angle), dim=-1)
+        
+        return p1, temp, grasp, score
+    
     
 # if __name__ == '__main__':
 #     m = ContactTransGrasp([1024, 512, 256], [0.2, 0.3, 0.4], 5, [[128, 128], [256, 256], [512, 512]], 4)

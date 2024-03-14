@@ -26,7 +26,7 @@ def pc_normalize(xyz: Optional[torch.Tensor]):
     d_max_expand = d_max.unsqueeze(-1).unsqueeze(-1).expand_as(xyz)
     xyz_norm = (xyz - center_xyz_expand) / d_max_expand
     
-    return center_xyz, d_max, xyz_norm     
+    return xyz_norm, center_xyz, d_max
 
 
 def square_distance(
