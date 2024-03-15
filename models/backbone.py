@@ -680,7 +680,8 @@ class GraspClassifier(nn.Module):
             nn.BatchNorm1d(feature_dim) if bn else nn.Identity(),
             nn.ReLU(),
             nn.Conv1d(feature_dim, 1, 1),
-            nn.BatchNorm1d(1) if bn else nn.Identity()
+            nn.BatchNorm1d(1) if bn else nn.Identity(),
+            nn.Sigmoid()
         )
         
     def forward(self, grasp, feat_group):

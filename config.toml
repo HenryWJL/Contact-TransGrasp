@@ -1,14 +1,14 @@
 [model]
-"sample_num" = [1024, 512, 256]
+"sample_num" = [512, 256, 128]
 "radius" = [0.2, 0.3, 0.4]
-"neighbor_num" = [20, 30, 40]
+"neighbor_num" = [10, 20, 30]
 "out_channels" = [[128, 128], [256, 256], [512, 512]]
 "nhead" = 8
 "num_layers" = 4
 "point_num" = 512
 
 [train]
-"batch_size" = 20
+"batch_size" = 8
 "epochs" = 100
 "lr" = 1e-4
 "weight_decay" = 0.05

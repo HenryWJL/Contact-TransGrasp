@@ -85,7 +85,8 @@ class TotalLoss(nn.Module):
     def get_regression_loss(
         self,
         grasp_pred: Optional[torch.Tensor],
-        grasp_gt: Optional[torch.Tensor]
+        grasp_gt: Optional[torch.Tensor],
+        class_gt: Optional[torch.Tensor]
         ):
         center_pred, quat_pred = pnt2quat(grasp_pred)
         center_gt, quat_gt = mat2quat(grasp_gt)

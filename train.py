@@ -158,19 +158,19 @@ def train(args):
     accelerator.print("Finished.")
 
 # def train(args):
-#     torch.cuda.set_device(5)
+#     torch.cuda.set_device(2)
 #     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #     # prepare dataloader
 #     train_dataset = GraspDataset(
 #         args.object_dir,
 #         args.mesh_dir,
-#         2048,
+#         1024,
 #         "train"
 #     )
 #     val_dataset = GraspDataset(
 #         args.object_dir,
 #         args.mesh_dir,
-#         2048,
+#         1024,
 #         "val"
 #     )
 #     train_dataloader = DataLoader(
@@ -211,7 +211,7 @@ def train(args):
 #         args.alpha,
 #         args.beta,
 #         args.theta
-#     )
+#     ).to(device)
     
 #     print(f"Training with batch size {args.batch_size} and learning rate {args.lr}.")
 #     loss_items = []
@@ -222,7 +222,7 @@ def train(args):
 #         for step, (point_cloud, T, success) in enumerate(train_dataloader):
 #             optimizer.zero_grad()
 #             p1, temp, grasp, score = model(point_cloud.to(device))
-#             grasp_gt, class_gt = set_ground_truth(grasp.detach(), T, success)
+#             grasp_gt, class_gt = set_ground_truth(grasp.detach(), T.to(device), success.to(device))
 #             loss = criterion(
 #                 xyz = point_cloud.to(device),
 #                 sample_xyz = p1.to(device),
@@ -248,7 +248,7 @@ def train(args):
 #         with torch.no_grad(): 
 #             for step, (point_cloud, T, success) in enumerate(val_dataloader):
 #                 p1, temp, grasp, score = model(point_cloud.to(device))
-#                 grasp_gt, class_gt = set_ground_truth(grasp, T, success)
+#                 grasp_gt, class_gt = set_ground_truth(grasp, T.to(device), success.to(device))
 #                 trans_error, rot_error, cls_accuracy = evaluate(grasp, grasp_gt, score, class_gt)
 #                 sum_trans_error += trans_error
 #                 sum_rot_error += rot_error
