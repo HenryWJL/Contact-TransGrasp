@@ -7,9 +7,7 @@ from pytorch3d.ops import knn_points
 from utils import SampleAndGroup, SoftProjection
 from utils import gather, pc_normalize, square_distance
 
-
 class MiniPointNet(nn.Module):
-    
     
     def __init__(
         self,
@@ -36,16 +34,13 @@ class MiniPointNet(nn.Module):
             self.mlps.append(nn.BatchNorm2d(out_channel) if bn else nn.Identity())
             in_channel = out_channel
         
-        
     def forward(self, x: Optional[torch.Tensor]):
         for i, mlp in enumerate(self.mlps):
             x = mlp(x)
             
         return x
-    
 
 class MultiheadAttention(nn.Module):
-    
     
     def __init__(
         self,
@@ -103,7 +98,6 @@ class MultiheadAttention(nn.Module):
             nn.Dropout(dropout, inplace=True)
         )
         
-        
     def forward(
         self,
         q: Optional[torch.Tensor],
@@ -135,10 +129,8 @@ class MultiheadAttention(nn.Module):
         y = self.proj((attn @ v).transpose(1, 2).reshape(B, N, C))
         
         return y
- 
 
 class TransformerEncoderLayer(nn.Module):
-    
     
     def __init__(
         self,
@@ -180,7 +172,6 @@ class TransformerEncoderLayer(nn.Module):
         )
         self.layer_norm2 = nn.LayerNorm(d_model)
         
-        
     def forward(
         self,
         x: Optional[torch.Tensor],
@@ -191,10 +182,8 @@ class TransformerEncoderLayer(nn.Module):
         
         return y2
 
-
 class TransformerEncoder(nn.Module):
-    
-    
+
     def __init__(
         self,
         d_model: Optional[int],
@@ -221,7 +210,6 @@ class TransformerEncoder(nn.Module):
             for i in range(num_layers)]
         )
         
-        
     def forward(
         self,
         x: Optional[torch.Tensor],
@@ -231,10 +219,8 @@ class TransformerEncoder(nn.Module):
             x = encoder_layer(x, pos)
             
         return x
-
     
 class EncoderBlock(nn.Module):
-    
     
     def __init__(
         self,
@@ -303,7 +289,6 @@ class EncoderBlock(nn.Module):
             nn.ReLU(inplace=True)
         )
         
-        
     def forward(
         self,
         xyz: Optional[torch.Tensor],
@@ -339,9 +324,7 @@ class EncoderBlock(nn.Module):
         
         return sample_xyz, new_feat
     
-    
 class DecoderBlock(nn.Module):
-    
     
     def __init__(
         self,
@@ -367,7 +350,6 @@ class DecoderBlock(nn.Module):
             nn.Conv1d(dim_in, dim_out, 1),
             nn.BatchNorm1d(dim_out) if bn else nn.Identity()
         )
-        
         
     def forward(
         self,
@@ -409,9 +391,7 @@ class DecoderBlock(nn.Module):
         
         return new_feat
     
-    
 class FeatureExtractor(nn.Module):
-    
     
     def __init__(
         self,
@@ -482,7 +462,6 @@ class FeatureExtractor(nn.Module):
             dim_out=out_channels[0][-1]
         )
         
-        
     def forward(self, xyz: Optional[torch.Tensor]):
         xyz_down_1, feat_down_1 = self.encoder1(xyz, xyz)  # 2048 -> 1024, 3 -> 128
         xyz_down_2, feat_down_2 = self.encoder2(xyz_down_1, feat_down_1)  # 1024 -> 512, 128 -> 256
@@ -493,9 +472,7 @@ class FeatureExtractor(nn.Module):
         
         return feat_up_1
     
-    
 class ContactPointSampler(nn.Module):
-    
     
     def __init__(
         self,
@@ -530,7 +507,6 @@ class ContactPointSampler(nn.Module):
             nn.Linear(256, 3 * sample_num)
         )
         self.soft_proj = SoftProjection()
-        
         
     def forward(
         self,
@@ -568,9 +544,7 @@ class ContactPointSampler(nn.Module):
             
         return p1, temp    
 
-
 class FeatureGrouper(nn.Module):
-    
     
     def __init__(
         self,
@@ -599,8 +573,7 @@ class FeatureGrouper(nn.Module):
             nn.ReLU(),
             nn.Conv1d(feature_dim, feature_dim, 1),
             nn.BatchNorm1d(feature_dim) if bn else nn.Identity()
-        )
-        
+        )   
         
     def forward(self, xyz, p1, feat):
         """
@@ -629,9 +602,7 @@ class FeatureGrouper(nn.Module):
         
         return feat_group
         
-
 class GraspRegressor(nn.Module):
-    
     
     def __init__(
         self,
@@ -672,7 +643,6 @@ class GraspRegressor(nn.Module):
             nn.BatchNorm1d(1) if bn else nn.Identity()
         )
         
-        
     def forward(self, feat_group):
         """
         
@@ -692,9 +662,7 @@ class GraspRegressor(nn.Module):
         
         return vector, width, angle
     
-    
 class GraspClassifier(nn.Module):
-    
     
     def __init__(
         self,
@@ -719,7 +687,6 @@ class GraspClassifier(nn.Module):
             nn.BatchNorm1d(1) if bn else nn.Identity()
         )
         
-        
     def forward(self, grasp, feat_group):
         """
         Params:
@@ -738,9 +705,7 @@ class GraspClassifier(nn.Module):
         
         return score
 
-
 class ContactTransGrasp(nn.Module):
-    
     
     def __init__(
         self,
@@ -790,6 +755,31 @@ class ContactTransGrasp(nn.Module):
         self.regressor = GraspRegressor(self.feature_dim)
         self.classifier = GraspClassifier(self.feature_dim)
     
+    def weights_init(self, init_type='normal'):
+        
+        def init_func(module):
+            classname = module.__class__.__name__
+            if (classname.find('Conv') ==0 or classname.find('Linear') == 0) and hasattr(module, 'weight'):
+                if init_type == 'normal':
+                    nn.init.normal_(module.weight.data, 0.0, 0.02)
+                    
+                elif init_type == 'xavier':
+                    nn.init.xavier_normal_(module.weight.data, gain=1.414)
+                    
+                elif init_type == 'kaiming':
+                    nn.init.kaiming_normal_(module.weight.data, a=0, mode='fan_in', nonlinearity='leaky_relu')
+                    
+                elif init_type == 'orthogonal':
+                    nn.init.orthogonal_(module.weight.data, gain=1.414)
+                    
+                else:
+                    assert 0, f"Unsupported initialization: {init_type}"
+                    
+            elif classname.find('BatchNorm1d') ==0 or classname.find('LayerNorm') ==0:
+                nn.init.normal_(module.weight.data, 0.0, 0.02)
+                nn.init.constant_(module.bias.data, 0.0)
+                
+        self.apply(init_func)
     
     def forward(self, xyz: Optional[torch.Tensor]):
         # get normalize points

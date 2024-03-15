@@ -1,18 +1,17 @@
 [model]
-"point_num" = 4096
-"fps_sample_num" = 1024
-"ball_radius" = 0.3
-"ball_neighbor_num" = 20
-"contact_sample_num" = 512
-"gather_neighbor_num" = 100
-"feature_dim" = 128
-"head_num" = 8
-"layer_num" = 6
+"sample_num" = 1024
+"radius" = 0.3
+"neighbor_num" = 20
+"out_channels" = 512
+"nhead" = 8
+"num_layers" = 4
+"point_num" = 512
 
 [train]
 "batch_size" = 12
 "epochs" = 100
 "lr" = 1e-4
+"weight_decay" = 0.05
 
 [loss]
 "alpha" = 1
