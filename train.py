@@ -21,19 +21,17 @@ def make_parser():
     )
     parser.add_argument(
         "--object_dir",
-        required=True,
-        default="data/grasps/scenes",
+        default="/home/wangjunlin/project/acronym2/data/grasps/scenes",
         help="The directory used for loading objects (.h5)."
     )
     parser.add_argument(
         "--mesh_dir",
-        required=True,
-        default="data/meshes/scenes",
+        default="/home/wangjunlin/project/acronym2/data/meshes/scenes",
         help="The directory used for loading meshes (.obj)."
     )
     parser.add_argument(
         "--save_dir",
-        default="data/meshes/scenes",
+        default="train_results",
         help="The directory used for saving training results."
     )
     
@@ -101,6 +99,7 @@ def train(args):
         lr_scheduler
     )
     
+    accelerator.print(f"Training with batch size {args.batch_size} and learning rate {args.lr}.")
     loss_items = []
     start_time = datetime.now()
     for epoch in tqdm(range(args.epochs)):      
@@ -179,6 +178,7 @@ def main(argv=sys.argv[1: ]):
     args.batch_size  = int(_config["train"]["batch_size"])
     args.epochs = int(_config["train"]["epochs"])
     args.lr = float(_config["train"]["lr"])
+    args.weight_decay = float(_config["train"]["weight_decay"])
     
     args.gamma = float(_config["loss"]["gamma"])
     args.alpha = float(_config["loss"]["alpha"])
