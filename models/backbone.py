@@ -2,10 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
-from pytorch3d.ops import knn_points
 
 from utils import SampleAndGroup, SoftProjection
-from utils import gather, pc_normalize, square_distance
+from utils import gather, pc_normalize, square_distance, knn_points
 
 class MiniPointNet(nn.Module):
     
@@ -535,9 +534,7 @@ class ContactPointSampler(nn.Module):
             _, _, p1 = knn_points(
                 p1=p1, 
                 p2=xyz, 
-                norm=2, 
-                K=1,
-                return_nn=True
+                K=1
             )
             p1 = p1.squeeze()
             temp = 0.0
@@ -592,7 +589,6 @@ class FeatureGrouper(nn.Module):
         _, neighbor_idx, _ = knn_points(
             p1=p1,
             p2=xyz,
-            norm=2,
             K=self.group_num
         )
         feat_group = gather(feat, neighbor_idx)

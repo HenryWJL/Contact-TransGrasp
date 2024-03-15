@@ -1,26 +1,3 @@
-"""
-The MIT License (MIT)
-
-Copyright (c) 2020 NVIDIA Corporation
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-"""
-
 import os
 import json
 import h5py
@@ -31,10 +8,11 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from glob import glob
 from typing import Optional
-from pytorch3d.ops import knn_points, knn_gather
 
+from .point_utils import knn_points, gather
 from .transforms import pnt2quat, mat2quat
 
+# copy from https://github.com/NVlabs/acronym/blob/main/acronym_tools/acronym.py
 def load_mesh(filename, mesh_root_dir, scale=None):
     """Load a mesh from a JSON or HDF5 file from the grasp dataset. The mesh will be scaled accordingly.
 
@@ -61,6 +39,7 @@ def load_mesh(filename, mesh_root_dir, scale=None):
                                                                                     
     return obj_mesh
 
+# copy from https://github.com/NVlabs/acronym/blob/main/acronym_tools/acronym.py
 def load_grasps(filename):
     """Load transformations and qualities of grasps from a JSON file from the dataset.
 
@@ -81,7 +60,9 @@ def load_grasps(filename):
         success = np.array(data["grasps/qualities/flex/object_in_gripper"])
     else:
         raise RuntimeError("Unknown file ending:", filename)
+    
     return T, success
+
 
 def set_ground_truth(
     grasp: Optional[torch.Tensor],
@@ -108,14 +89,14 @@ def set_ground_truth(
     _, neighbor_idx, _ = knn_points(
         p1=center_xyz.float(), 
         p2=gt_center_xyz.float(), 
-        norm=2, 
-        K=1, 
+        K=1
     )
     B, W = success.shape
-    grasp_gt = knn_gather(T.float().reshape(B, W, -1), neighbor_idx).reshape(B, -1, 4, 4)
-    class_gt = knn_gather(success.float().unsqueeze(-1), neighbor_idx).reshape(B, -1)
+    grasp_gt = gather(T.float().reshape(B, W, -1), neighbor_idx).reshape(B, -1, 4, 4)
+    class_gt = gather(success.float().unsqueeze(-1), neighbor_idx).reshape(B, -1)
     
     return grasp_gt, class_gt
+
 
 def evaluate(
     grasp_pred: Optional[torch.Tensor],
@@ -136,7 +117,9 @@ def evaluate(
     
     return trans_error, rot_error, cls_accuracy
 
+
 class GraspDataset(Dataset):
+    
     
     def __init__(
         self,
@@ -163,12 +146,14 @@ class GraspDataset(Dataset):
         self.mesh_dir = os.path.join(mesh_dir, mode)
         self.point_num = point_num
     
+    
     def __getitem__(self, key):
         T, success = load_grasps(self.object_fname[key])
         mesh = load_mesh(self.object_fname[key], mesh_root_dir=self.mesh_dir)
         point_cloud = mesh.sample(self.point_num)
         point_cloud = torch.from_numpy(point_cloud).float()
         return point_cloud, T, success
+    
     
     def __len__(self):
         return len(self.object_fname)

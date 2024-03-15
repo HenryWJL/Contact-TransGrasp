@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
-from pytorch3d.ops import knn_points
+
+from .point_utils import knn_points
 
 
 class SoftProjection(nn.Module):
@@ -51,9 +52,7 @@ class SoftProjection(nn.Module):
         squared_dist, _, neighbor_xyz = knn_points(
             p1=sample_xyz, 
             p2=xyz, 
-            norm=2, 
-            K=self.neighbor_num, 
-            return_nn=True
+            K=self.neighbor_num
         )
         weight = F.softmax(- squared_dist / self.temp.to(xyz.device) ** 2, dim=-1)
         weight = weight.unsqueeze(-1).expand_as(neighbor_xyz)

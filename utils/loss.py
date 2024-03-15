@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
-from pytorch3d.ops import knn_points
 
+from .point_utils import knn_points
 from .transforms import pnt2quat, mat2quat
 
 class TotalLoss(nn.Module):
@@ -70,8 +70,8 @@ class TotalLoss(nn.Module):
         xyz: Optional[torch.Tensor],
         sample_xyz: Optional[torch.Tensor]
         ):
-        dist_smp_org, _, _ = knn_points(p1=sample_xyz, p2=xyz, norm=2, K=1)
-        dist_org_smp, _, _ = knn_points(p1=xyz, p2=sample_xyz, norm=2, K=1)
+        dist_smp_org, _, _ = knn_points(p1=sample_xyz, p2=xyz, K=1)
+        dist_org_smp, _, _ = knn_points(p1=xyz, p2=sample_xyz, K=1)
         loss_smp_org = torch.mean(dist_smp_org)
         loss_org_smp = torch.mean(dist_org_smp)
         loss_max_min, _ = torch.max(dist_smp_org.squeeze(-1), dim=-1)

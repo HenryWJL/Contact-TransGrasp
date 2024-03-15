@@ -134,7 +134,7 @@ def train(args):
         with torch.no_grad(): 
             for step, (point_cloud, T, success) in enumerate(val_dataloader):
                 p1, temp, grasp, score = model(point_cloud)
-                grasp_gt, class_gt = set_ground_truth(grasp.detach(), T, success)
+                grasp_gt, class_gt = set_ground_truth(grasp, T, success)
                 trans_error, rot_error, cls_accuracy = evaluate(grasp, grasp_gt, score, class_gt)
                 sum_trans_error += trans_error
                 sum_rot_error += rot_error
@@ -156,6 +156,120 @@ def train(args):
     model_save_path = os.path.join(args.save_dir, f"{args.epochs}_{args.lr}.pth")     
     accelerator.save(model.state_dict(), model_save_path) 
     accelerator.print("Finished.")
+
+# def train(args):
+#     torch.cuda.set_device(5)
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     # prepare dataloader
+#     train_dataset = GraspDataset(
+#         args.object_dir,
+#         args.mesh_dir,
+#         2048,
+#         "train"
+#     )
+#     val_dataset = GraspDataset(
+#         args.object_dir,
+#         args.mesh_dir,
+#         2048,
+#         "val"
+#     )
+#     train_dataloader = DataLoader(
+#         train_dataset,
+#         batch_size=args.batch_size,
+#         shuffle=True,
+#         drop_last=False
+#     )
+#     val_dataloader = DataLoader(
+#         val_dataset,
+#         batch_size=args.batch_size,
+#         shuffle=False,
+#         drop_last=False
+#     )
+#     # instantiate model
+#     model = ContactTransGrasp(
+#         sample_num=args.sample_num,
+#         radius=args.radius,
+#         neighbor_num=args.neighbor_num,
+#         out_channels=args.out_channels,
+#         nhead=args.nhead,
+#         num_layers=args.num_layers,
+#         point_num=args.point_num
+#     ).to(device)
+#     model.weights_init("normal")
+#     optimizer = torch.optim.AdamW(
+#         model.parameters(),
+#         args.lr,
+#         weight_decay=args.weight_decay
+#     )
+#     lr_scheduler = StepLR(
+#         optimizer,
+#         step_size=50,
+#         gamma=0.1
+#     )
+#     criterion = TotalLoss(
+#         args.gamma,
+#         args.alpha,
+#         args.beta,
+#         args.theta
+#     )
+    
+#     print(f"Training with batch size {args.batch_size} and learning rate {args.lr}.")
+#     loss_items = []
+#     start_time = datetime.now()
+#     for epoch in tqdm(range(args.epochs)):      
+#         # training
+#         model.train()
+#         for step, (point_cloud, T, success) in enumerate(train_dataloader):
+#             optimizer.zero_grad()
+#             p1, temp, grasp, score = model(point_cloud.to(device))
+#             grasp_gt, class_gt = set_ground_truth(grasp.detach(), T, success)
+#             loss = criterion(
+#                 xyz = point_cloud.to(device),
+#                 sample_xyz = p1.to(device),
+#                 temp = temp.to(device),
+#                 grasp_pred = grasp.to(device),
+#                 grasp_gt = grasp_gt.to(device),
+#                 class_pred = score.to(device),
+#                 class_gt = class_gt.to(device)
+#             )
+#             loss.backward()
+#             optimizer.step()
+#             if step == (len(train_dataloader) - 1):
+#                 print("Epoch [%d/%d], Loss: %.5f" % (epoch + 1, args.epochs, loss.item()))
+#                 loss_items.append(loss.item())
+                
+#         # lr_scheduler.step()
+        
+#         # validation   
+#         model.eval()   
+#         sum_trans_error = 0.0
+#         sum_rot_error = 0.0
+#         sum_accuracy = 0.0 
+#         with torch.no_grad(): 
+#             for step, (point_cloud, T, success) in enumerate(val_dataloader):
+#                 p1, temp, grasp, score = model(point_cloud.to(device))
+#                 grasp_gt, class_gt = set_ground_truth(grasp, T, success)
+#                 trans_error, rot_error, cls_accuracy = evaluate(grasp, grasp_gt, score, class_gt)
+#                 sum_trans_error += trans_error
+#                 sum_rot_error += rot_error
+#                 sum_accuracy += cls_accuracy
+        
+#         mean_trans_error = sum_trans_error / len(val_dataloader)
+#         mean_rot_error = sum_rot_error / len(val_dataloader)
+#         mean_accuracy = sum_accuracy / len(val_dataloader)
+#         print(f"Translation Error: {mean_trans_error}; \
+#             Rotation Error: {mean_rot_error}; Accuracy: {mean_accuracy}")
+        
+#     print(f"Training time: {str(datetime.now() - start_time)}")
+#     # save loss
+#     loss_save_path = os.path.join(args.save_dir, f"{args.epochs}_{args.lr}.npy")
+#     np.save(loss_save_path, np.array(loss_items)) 
+#     # # save model
+#     # model = accelerator.unwrap_model(model) 
+#     # accelerator.wait_for_everyone()
+#     # model_save_path = os.path.join(args.save_dir, f"{args.epochs}_{args.lr}.pth")     
+#     # accelerator.save(model.state_dict(), model_save_path) 
+#     # accelerator.print("Finished.")
     
 def main(argv=sys.argv[1: ]):
     
