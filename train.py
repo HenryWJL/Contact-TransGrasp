@@ -11,9 +11,8 @@ from tqdm import tqdm
 from accelerate import Accelerator
 from datetime import datetime
 
-from utils import TotalLoss, GraspDataset, set_ground_truth
+from utils import TotalLoss, GraspDataset, set_ground_truth, evaluate
 from models import ContactTransGrasp
-
 
 def make_parser():
     parser = argparse.ArgumentParser(
@@ -22,17 +21,23 @@ def make_parser():
     )
     parser.add_argument(
         "--object_dir",
+        required=True,
         default="data/grasps/scenes",
         help="The directory used for loading objects (.h5)."
     )
     parser.add_argument(
         "--mesh_dir",
+        required=True,
         default="data/meshes/scenes",
         help="The directory used for loading meshes (.obj)."
     )
+    parser.add_argument(
+        "--save_dir",
+        default="data/meshes/scenes",
+        help="The directory used for saving training results."
+    )
     
     return parser
-
 
 def train(args):
     accelerator = Accelerator(split_batches=True)
@@ -97,7 +102,6 @@ def train(args):
     )
     
     loss_items = []
-    val_accuracy = []
     start_time = datetime.now()
     for epoch in tqdm(range(args.epochs)):      
         # training
@@ -125,35 +129,49 @@ def train(args):
         
         # validation   
         model.eval()   
+        sum_trans_error = 0.0
+        sum_rot_error = 0.0
         sum_accuracy = 0.0 
         with torch.no_grad(): 
             for step, (point_cloud, T, success) in enumerate(val_dataloader):
                 p1, temp, grasp, score = model(point_cloud)
                 grasp_gt, class_gt = set_ground_truth(grasp.detach(), T, success)
-                cls_accuracy = torch.mean(((score > 0.5) == class_gt).float()).item()
+                trans_error, rot_error, cls_accuracy = evaluate(grasp, grasp_gt, score, class_gt)
+                sum_trans_error += trans_error
+                sum_rot_error += rot_error
                 sum_accuracy += cls_accuracy
         
-        accelerator.print("Accuracy: ", sum_accuracy / len(val_dataloader))
-        val_accuracy.append(sum_accuracy / len(val_dataloader))
+        mean_trans_error = sum_trans_error / len(val_dataloader)
+        mean_rot_error = sum_rot_error / len(val_dataloader)
+        mean_accuracy = sum_accuracy / len(val_dataloader)
+        accelerator.print(f"Translation Error: {mean_trans_error}; \
+            Rotation Error: {mean_rot_error}; Accuracy: {mean_accuracy}")
         
-    accelerator.print("Training time: " + str(datetime.now() - start_time))
-    # saving format: epochs + batch size + learning rate
-    np.save("data/train_results/loss/%d_%d_%f.npy" % (args.epochs, args.batch_size, args.lr), np.array(loss_items)) 
-    np.save("data/train_results/accuracy/%d_%d_%f.npy" % (args.epochs, args.batch_size, args.lr), np.array(val_accuracy)) 
+    accelerator.print(f"Training time: {str(datetime.now() - start_time)}")
+    # save loss
+    loss_save_path = os.path.join(args.save_dir, f"{args.epochs}_{args.lr}.npy")
+    np.save(loss_save_path, np.array(loss_items)) 
+    # save model
     model = accelerator.unwrap_model(model) 
-    accelerator.wait_for_everyone()     
-    accelerator.save(model.state_dict(), "data/train_results/models/%d_%d_%f.pth" % (args.epochs, args.batch_size, args.lr)) 
+    accelerator.wait_for_everyone()
+    model_save_path = os.path.join(args.save_dir, f"{args.epochs}_{args.lr}.pth")     
+    accelerator.save(model.state_dict(), model_save_path) 
+    accelerator.print("Finished.")
     
 def main(argv=sys.argv[1: ]):
     
     parser = make_parser()
     args = parser.parse_args(argv)
+    
+    if not os.path.isdir(args.save_dir):
+        os.mkdir(args.save_dir)
 
     _config = tomli.load(open('config.toml', 'rb'))
    
-    args.sample_num = int(_config["model"]["sample_num"])
-    args.radius = float(_config["model"]["radius"])
-    args.neighbor_num = int(_config["model"]["neighbor_num"])
+    args.sample_num = list(_config["model"]["sample_num"])
+    args.radius = list(_config["model"]["radius"])
+    args.neighbor_num = list(_config["model"]["neighbor_num"])
+    args.out_channels = list(_config["model"]["out_channels"])
     args.nhead = int(_config["model"]["nhead"])
     args.num_layers = int(_config["model"]["num_layers"])
     args.point_num = int(_config["model"]["point_num"])

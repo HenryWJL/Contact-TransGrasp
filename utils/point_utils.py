@@ -18,6 +18,7 @@ def gather(
 
 
 def pc_normalize(xyz: Optional[torch.Tensor]):
+    """normalize point cloud"""
     B, N, C = xyz.shape  
     center_xyz = torch.mean(xyz, dim=-2).detach()
     center_xyz_expand = center_xyz.unsqueeze(-2).expand_as(xyz)

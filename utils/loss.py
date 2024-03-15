@@ -4,11 +4,9 @@ import torch.nn.functional as F
 from typing import Optional
 from pytorch3d.ops import knn_points
 
-from .transform import pnt2quat, mat2quat
-
+from .transforms import pnt2quat, mat2quat
 
 class TotalLoss(nn.Module):
-    
     
     def __init__(
         self,
@@ -31,7 +29,6 @@ class TotalLoss(nn.Module):
         self.beta = beta
         self.theta = theta
         
-    
     def forward(
         self,
         xyz: Optional[torch.Tensor],
@@ -62,12 +59,11 @@ class TotalLoss(nn.Module):
         '''
         sample_loss = self.get_sample_loss(xyz, sample_xyz)
         proj_loss = self.get_projection_loss(temp)
-        reg_loss = self.get_regression_loss(grasp_pred, grasp_gt)
+        reg_loss = self.get_regression_loss(grasp_pred, grasp_gt, class_gt)
         cls_loss = self.get_classification_loss(class_pred, class_gt)
         total_loss = self.theta * sample_loss + proj_loss + self.beta * reg_loss + cls_loss
         
         return total_loss
-    
     
     def get_sample_loss(
         self,
@@ -83,13 +79,8 @@ class TotalLoss(nn.Module):
         
         return loss_smp_org + loss_max_min + self.gamma * loss_org_smp
     
-    
     def get_projection_loss(self, temp: Optional[nn.Parameter]):
-        if temp is None:
-            return 0.0
-        else:
-            return temp ** 2
-    
+        return temp ** 2
     
     def get_regression_loss(
         self,
@@ -98,18 +89,17 @@ class TotalLoss(nn.Module):
         ):
         center_pred, quat_pred = pnt2quat(grasp_pred)
         center_gt, quat_gt = mat2quat(grasp_gt)
-        trans_loss = F.pairwise_distance(center_pred.reshape(-1, 3), center_gt.reshape(-1, 3))
-        trans_loss = torch.mean(trans_loss)
-        rot_loss = 1 - (quat_pred.reshape(-1, 4) * quat_gt.reshape(-1, 4)).sum(dim=-1)
-        rot_loss = torch.mean(rot_loss)
+        dist = F.pairwise_distance(center_pred.reshape(-1, 3), center_gt.reshape(-1, 3))
+        trans_loss = torch.mean(dist * class_gt.reshape(-1))
+        dot_product = (quat_pred.reshape(-1, 4) * quat_gt.reshape(-1, 4)).sum(dim=-1)
+        rot_loss = torch.acos(torch.abs(dot_product))
+        rot_loss = torch.mean(rot_loss * class_gt.reshape(-1))
         
         return trans_loss + self.alpha * rot_loss
     
-        
     def get_classification_loss(
         self,
         class_pred: Optional[torch.Tensor],
         class_gt: Optional[torch.Tensor]
         ):
-        
         return F.binary_cross_entropy(class_pred, class_gt)
