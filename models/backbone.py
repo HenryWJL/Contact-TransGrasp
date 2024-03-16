@@ -80,7 +80,7 @@ class MultiheadAttention(nn.Module):
                 groups=self.head_dim
             ),
             nn.BatchNorm2d(self.head_dim) if bn else nn.Identity(),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Conv2d(
                 in_channels=self.head_dim,
                 out_channels=1,
@@ -90,11 +90,11 @@ class MultiheadAttention(nn.Module):
         )
         self.softmax = nn.Sequential(
             nn.Softmax(dim=-1),
-            nn.Dropout(dropout, inplace=True)
+            nn.Dropout(dropout)
         )
         self.proj = nn.Sequential(
             nn.Linear(embed_dim, embed_dim),
-            nn.Dropout(dropout, inplace=True)
+            nn.Dropout(dropout)
         )
         
     def forward(
@@ -164,10 +164,10 @@ class TransformerEncoderLayer(nn.Module):
         self.layer_norm1 = nn.LayerNorm(d_model)
         self.mlp = nn.Sequential(
             nn.Linear(d_model, 2 * d_model),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout, inplace=True),
+            nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(2 * d_model, d_model),
-            nn.Dropout(dropout, inplace=True)
+            nn.Dropout(dropout)
         )
         self.layer_norm2 = nn.LayerNorm(d_model)
         
@@ -258,7 +258,7 @@ class EncoderBlock(nn.Module):
         self.feat_aggregator = nn.Sequential(
             nn.Conv1d(feature_dim, feature_dim, 1),
             nn.BatchNorm1d(feature_dim) if bn else nn.Identity(),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Conv1d(feature_dim, out_channels[-1], 1),
             nn.BatchNorm1d(out_channels[-1]) if bn else nn.Identity()
         )
@@ -269,7 +269,7 @@ class EncoderBlock(nn.Module):
         )
         self.pos_encoder = nn.Sequential(
             nn.Linear(3, feature_dim),  
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Linear(feature_dim, out_channels[-1])
         )
         self.transformer_encoder = TransformerEncoder(
@@ -285,7 +285,7 @@ class EncoderBlock(nn.Module):
         self.mlp = nn.Sequential(
             nn.Conv1d(out_channels[-1], out_channels[-1], 1),
             nn.BatchNorm1d(out_channels[-1]) if bn else nn.Identity(),
-            nn.ReLU(inplace=True)
+            nn.ReLU()
         )
         
     def forward(
@@ -698,7 +698,7 @@ class GraspClassifier(nn.Module):
         # feature aggregation
         feat_agg = torch.max(feat_group, dim=-2)[0]  # (B, M, C)
         feat = torch.cat([grasp, feat_agg], dim=-1)  # (B, M, (C+7))
-        score = self.mlp(feat.transpose(2, 1)).squeeze()
+        score = self.mlp(feat.transpose(2, 1)).squeeze(-2)
         
         return score
 

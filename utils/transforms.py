@@ -64,5 +64,6 @@ def rot2quat(rot_mat: Optional[torch.Tensor]):
     y = (rot_mat[:, :, 0, 2] - rot_mat[:, :, 2, 0]) / (4 * w)
     z = (rot_mat[:, :, 1, 0] - rot_mat[:, :, 0, 1]) / (4 * w)
     quat = torch.stack([w, x, y, z], dim=-1)
+    quat = F.normalize(quat, dim=-1)
     
     return quat

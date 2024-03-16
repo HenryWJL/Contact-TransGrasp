@@ -103,4 +103,8 @@ class TotalLoss(nn.Module):
         class_pred: Optional[torch.Tensor],
         class_gt: Optional[torch.Tensor]
         ):
-        return F.binary_cross_entropy(class_pred, class_gt)
+        if class_pred.sum().isnan():
+            return 1e-6
+        
+        else:
+            return F.binary_cross_entropy(class_pred, class_gt)
