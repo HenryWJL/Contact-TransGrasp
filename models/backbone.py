@@ -5,220 +5,10 @@ from typing import Optional
 
 from utils import SampleAndGroup, SoftProjection
 from utils import gather, pc_normalize, square_distance, knn_points
+from .pointnet import MiniPointNet
+from .transformer import MultiheadAttention, TransformerEncoder
 
-class MiniPointNet(nn.Module):
-    
-    def __init__(
-        self,
-        dim_in: Optional[int],
-        out_channels: Optional[list],
-        bn: Optional[bool] = True
-        ):
-        """Mini PointNet module in PointNet++
-        
-        Params:
-            in_channel: the dimension of the input
-            
-            out_channels: the output channels of Conv2d submodules
-            
-            bn: if True, add batch normalization
-            
-        """
-        super().__init__()
-        
-        self.mlps = nn.ModuleList()
-        in_channel = dim_in
-        for out_channel in out_channels:
-            self.mlps.append(nn.Conv2d(in_channel, out_channel, 1))
-            self.mlps.append(nn.BatchNorm2d(out_channel) if bn else nn.Identity())
-            in_channel = out_channel
-        
-    def forward(self, x: Optional[torch.Tensor]):
-        for i, mlp in enumerate(self.mlps):
-            x = mlp(x)
-            
-        return x
 
-class MultiheadAttention(nn.Module):
-    
-    def __init__(
-        self,
-        embed_dim: Optional[int],
-        num_heads: Optional[int],
-        dropout: Optional[float] = 0.0,
-        bn: Optional[bool] = True,
-        qkv_bias: Optional[bool] = False
-        ):
-        """Multi-head vector attention with relative positional encoding
-        
-        Params:
-            embed_dim: the dimension of the input embeddings
-            
-            num_heads: the number of attention heads
-        
-            dropout: the dropout ratio
-            
-            bn: if True, add batch normalization to the attention mlp
-            
-            qkv_bias: if True, add bias to qkv
-            
-        """
-        super().__init__()
-        
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-        
-        self.w_q = nn.Linear(embed_dim, embed_dim, bias=qkv_bias)
-        self.w_k = nn.Linear(embed_dim, embed_dim, bias=qkv_bias)
-        self.w_v = nn.Linear(embed_dim, embed_dim, bias=qkv_bias)
-        
-        self.attn_mlp = nn.Sequential(
-            nn.Conv2d(
-                in_channels=self.head_dim,
-                out_channels=self.head_dim,
-                kernel_size=1,
-                groups=self.head_dim
-            ),
-            nn.BatchNorm2d(self.head_dim) if bn else nn.Identity(),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=self.head_dim,
-                out_channels=1,
-                kernel_size=1
-            ),
-            nn.BatchNorm2d(1) if bn else nn.Identity()
-        )
-        self.softmax = nn.Sequential(
-            nn.Softmax(dim=-1),
-            nn.Dropout(dropout)
-        )
-        self.proj = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim),
-            nn.Dropout(dropout)
-        )
-        
-    def forward(
-        self,
-        q: Optional[torch.Tensor],
-        k: Optional[torch.Tensor],
-        v: Optional[torch.Tensor],
-        pos: Optional[torch.Tensor]
-        ):
-        """
-        
-        Params:
-            q: query
-            
-            k: key
-            
-            v: value
-            
-            pos: position embeddings
-            
-        """
-        B, N, C = q.shape
-        q = self.w_q(q)
-        k = self.w_k(k)
-        v = self.w_v(v).reshape(B, N, self.num_heads, self.head_dim).transpose(2, 1)  # (B, num_heads, N, head_dim)
-        qk_rel = q.unsqueeze(2) - k.unsqueeze(1)  # (B, N, N, embed_dim)
-        qk_rel = qk_rel.reshape(B, N, N, self.num_heads, self.head_dim).permute(0, 3, 1, 2, 4)  # (B, num_heads, N, N, head_dim)
-        pos = pos.reshape(B, N, N, self.num_heads, self.head_dim).permute(0, 3, 1, 2, 4)  # (B, num_heads, N, N, head_dim)
-        attn_mlp_input = (qk_rel + pos).reshape(-1, N, N, self.head_dim).permute(0, 3, 1, 2)  # (B * num_heads, head_dim, N, N)
-        attn = self.softmax(self.attn_mlp(attn_mlp_input)).reshape(B, self.num_heads, N, N)  # (B, num_heads, N, N)
-        y = self.proj((attn @ v).transpose(1, 2).reshape(B, N, C))
-        
-        return y
-
-class TransformerEncoderLayer(nn.Module):
-    
-    def __init__(
-        self,
-        d_model: Optional[int],
-        nhead: Optional[int],
-        dim_feedforward: Optional[int] = 1024,
-        dropout: Optional[float] = 0.1,
-        bn: Optional[bool] = True
-        ):
-        """
-        
-        Params:
-            d_model: the dimension of input features 
-            
-            nhead: the number of attention heads
-            
-            dim_feedforward: the dimension of the FFN hidden layer
-        
-            dropout: the dropout ratio
-            
-            bn: if True, add batch normalization
-            
-        """
-        super().__init__()
-        
-        self.attn = MultiheadAttention(
-            embed_dim=d_model,
-            num_heads=nhead,
-            dropout=dropout,
-            bn=bn
-        )
-        self.layer_norm1 = nn.LayerNorm(d_model)
-        self.mlp = nn.Sequential(
-            nn.Linear(d_model, 2 * d_model),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(2 * d_model, d_model),
-            nn.Dropout(dropout)
-        )
-        self.layer_norm2 = nn.LayerNorm(d_model)
-        
-    def forward(
-        self,
-        x: Optional[torch.Tensor],
-        pos: Optional[torch.Tensor]
-        ):
-        y1 = self.layer_norm1(self.attn(x, x, x, pos) + x)
-        y2 = self.layer_norm2(self.mlp(y1) + y1)
-        
-        return y2
-
-class TransformerEncoder(nn.Module):
-
-    def __init__(
-        self,
-        d_model: Optional[int],
-        nhead: Optional[int],
-        num_layers: Optional[int]
-        ):
-        """
-        
-        Params:
-            d_model: the dimension of features in the input 
-            
-            nhead: the number of attention heads
-            
-            num_layers: the number of Transformer encoder layers 
-            
-        """
-        super().__init__()
-        
-        self.encoder = nn.ModuleList([
-            TransformerEncoderLayer(
-                d_model=d_model,
-                nhead=nhead
-            )
-            for i in range(num_layers)]
-        )
-        
-    def forward(
-        self,
-        x: Optional[torch.Tensor],
-        pos: Optional[torch.Tensor]
-        ):
-        for _, encoder_layer in enumerate(self.encoder):
-            x = encoder_layer(x, pos)
-            
-        return x
-    
 class EncoderBlock(nn.Module):
     
     def __init__(
@@ -323,6 +113,7 @@ class EncoderBlock(nn.Module):
         
         return sample_xyz, new_feat
     
+    
 class DecoderBlock(nn.Module):
     
     def __init__(
@@ -389,6 +180,7 @@ class DecoderBlock(nn.Module):
         new_feat = self.mlp(new_feat.transpose(2, 1)).transpose(2, 1)
         
         return new_feat
+    
     
 class FeatureExtractor(nn.Module):
     
@@ -471,6 +263,7 @@ class FeatureExtractor(nn.Module):
         
         return feat_up_1
     
+    
 class ContactPointSampler(nn.Module):
     
     def __init__(
@@ -541,63 +334,7 @@ class ContactPointSampler(nn.Module):
             
         return p1, temp    
 
-class FeatureGrouper(nn.Module):
-    
-    def __init__(
-        self,
-        feature_dim: Optional[int],
-        group_num: Optional[int] = 50,
-        bn: Optional[bool] = True
-        ):
-        """Group point features around sampled points
-        
-        Params:
-            group_num: the number of points in a group 
-            
-            feature_dim: the dimension of point features
-        
-            bn: If true, adds batch normalization to the regression layers
-            
-        """
-        super().__init__()
-        
-        self.feature_dim = feature_dim
-        self.group_num = group_num
-        
-        self.mlp = nn.Sequential(
-            nn.Conv1d(feature_dim, feature_dim, 1),
-            nn.BatchNorm1d(feature_dim) if bn else nn.Identity(),
-            nn.ReLU(),
-            nn.Conv1d(feature_dim, feature_dim, 1),
-            nn.BatchNorm1d(feature_dim) if bn else nn.Identity()
-        )   
-        
-    def forward(self, xyz, p1, feat):
-        """
-        
-        Params:
-            xyz: the xyz coordinates of the originally input point cloud
-            
-            p1: the sampled contact points
-        
-            feat: the extracted point features
-            
-        Returns:
-            the grouped point features
-            
-        """
-        _, neighbor_idx, _ = knn_points(
-            p1=p1,
-            p2=xyz,
-            K=self.group_num
-        )
-        feat_group = gather(feat, neighbor_idx)
-        B, N, K, C = feat_group.shape
-        feat_group = feat_group.reshape(-1, K, C).transpose(2, 1)
-        feat_group = self.mlp(feat_group).transpose(2, 1).reshape(B, N, K, C)
-        
-        return feat_group
-        
+
 class GraspRegressor(nn.Module):
     
     def __init__(
@@ -658,6 +395,7 @@ class GraspRegressor(nn.Module):
         
         return vector, width, angle
     
+    
 class GraspClassifier(nn.Module):
     
     def __init__(
@@ -701,6 +439,7 @@ class GraspClassifier(nn.Module):
         score = self.mlp(feat.transpose(2, 1)).squeeze(-2)
         
         return score
+
 
 class ContactTransGrasp(nn.Module):
     
@@ -801,6 +540,7 @@ class ContactTransGrasp(nn.Module):
         
         return p1, temp, grasp, score
     
+
     
 # if __name__ == '__main__':
 #     m = ContactTransGrasp(

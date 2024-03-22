@@ -10,7 +10,7 @@
 [train]
 "batch_size" = 6
 "epochs" = 100
-"lr" = 1e-4
+"lr" = 1e-5
 "weight_decay" = 0.05
 
 [loss]

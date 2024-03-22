@@ -111,7 +111,7 @@ def evaluate(
     dist = F.pairwise_distance(center_pred.reshape(-1, 3), center_gt.reshape(-1, 3))
     trans_error = torch.mean(dist * class_gt.reshape(-1)).item()
     rot_error = 1 - (quat_pred.reshape(-1, 4) * quat_gt.reshape(-1, 4)).sum(dim=-1)
-    rot_error = torch.mean(rot_loss).item()
+    rot_error = torch.mean(rot_error).item()
     # classification accuracy
     cls_accuracy = torch.mean(((class_pred > 0.5) == class_gt).float()).item()
     
@@ -152,6 +152,7 @@ class GraspDataset(Dataset):
         mesh = load_mesh(self.object_fname[key], mesh_root_dir=self.mesh_dir)
         point_cloud = mesh.sample(self.point_num)
         point_cloud = torch.from_numpy(point_cloud).float()
+        
         return point_cloud, T, success
     
     

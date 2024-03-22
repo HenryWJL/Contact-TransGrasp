@@ -82,6 +82,7 @@ class TotalLoss(nn.Module):
     def get_projection_loss(self, temp: Optional[nn.Parameter]):
         return temp ** 2
     
+    
     def get_regression_loss(
         self,
         grasp_pred: Optional[torch.Tensor],
@@ -94,17 +95,15 @@ class TotalLoss(nn.Module):
         trans_loss = torch.mean(dist * class_gt.reshape(-1))
         dot_product = (quat_pred.reshape(-1, 4) * quat_gt.reshape(-1, 4)).sum(dim=-1)
         rot_loss = torch.acos(torch.abs(dot_product))
+        # rot_loss = 1 - (quat_pred.reshape(-1, 4) * quat_gt.reshape(-1, 4)).sum(dim=-1)
         rot_loss = torch.mean(rot_loss * class_gt.reshape(-1))
         
         return trans_loss + self.alpha * rot_loss
+    
     
     def get_classification_loss(
         self,
         class_pred: Optional[torch.Tensor],
         class_gt: Optional[torch.Tensor]
         ):
-        if class_pred.sum().isnan():
-            return 1e-6
-        
-        else:
-            return F.binary_cross_entropy(class_pred, class_gt)
+        return F.binary_cross_entropy(class_pred, class_gt)
