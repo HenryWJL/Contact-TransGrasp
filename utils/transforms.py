@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 from typing import Optional
-import transforms3d as tfs
 
 # modify from https://github.com/antoalli/L2G/blob/main/l2g_core/utils/grasp_utils.py
 def pnt2quat(grasp: Optional[torch.Tensor]):

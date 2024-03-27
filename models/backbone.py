@@ -1,10 +1,22 @@
+import os
+import sys
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(ROOT_DIR)
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
 
-from utils import SampleAndGroup, SoftProjection
-from utils import gather, pc_normalize, square_distance, knn_points
+from utils.point_utils import (
+    SampleAndGroup,
+    SoftProjection,
+    gather,
+    pc_normalize,
+    square_distance,
+    knn_points
+)
 from .pointnet import MiniPointNet
 from .transformer import MultiheadAttention, TransformerEncoder
 

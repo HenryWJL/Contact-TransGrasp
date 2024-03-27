@@ -1,5 +1,9 @@
 import os
 import sys
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(ROOT_DIR)
+
 import argparse
 import tomli
 import numpy as np
@@ -11,8 +15,13 @@ from tqdm import tqdm
 from accelerate import Accelerator
 from datetime import datetime
 
-from utils import TotalLoss, GraspDataset, set_ground_truth, evaluate
-from models import ContactTransGrasp
+from utils.loss import TotalLoss
+from utils.acronym_utils import (
+    GraspDataset,
+    set_ground_truth,
+    evaluate
+)
+from models.backbone import ContactTransGrasp
 
 def make_parser():
     parser = argparse.ArgumentParser(
