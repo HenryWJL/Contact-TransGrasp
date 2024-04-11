@@ -1,1 +1,1 @@
-# Contact-TransGrasp-2.0
+# Contact-TransGrasp
